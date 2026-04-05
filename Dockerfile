@@ -1,9 +1,11 @@
-FROM node:22.3.0-alpine AS build-stage
+FROM node:22-alpine AS build-stage
 
 WORKDIR /app
-
-RUN corepack enable \
-    && corepack prepare pnpm@8.15.9 --activate
+# Update Corepack first, then activate the same pnpm version
+# that package.json declares.
+RUN npm install -g corepack@latest \
+    && corepack enable \
+    && corepack prepare pnpm@10.30.3 --activate
 
 COPY package.json pnpm-lock.yaml ./
 
@@ -14,12 +16,7 @@ COPY . .
 
 RUN NODE_OPTIONS="--max-old-space-size=16384" pnpm build
 
-# Remove dev dependencies after build
-RUN pnpm prune --prod
-
-
 FROM nginx:alpine-slim
-
 
 # Remove default nginx assets
 RUN rm -rf /usr/share/nginx/html/*
