@@ -87,7 +87,7 @@ async function onProjectFileChange(event: Event) {
         <Button
             secondary
             filled
-            title="Save an editable Lopaka project file"
+            title="Save an editable project file"
             @click="saveProjectFile"
         >
             <Icon
@@ -99,7 +99,7 @@ async function onProjectFileChange(event: Event) {
         <Button
             secondary
             filled
-            title="Load an editable Lopaka project file"
+            title="Load a project file"
             @click="openLoadWarning"
         >
             <Icon
