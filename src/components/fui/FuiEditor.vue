@@ -261,6 +261,16 @@ function onMouseClick() {
         v-if="platform || isScreenNotFound"
     >
         <div class="fui-editor__left -mb-8 border-r border-secondary">
+            <div
+                v-if="isScreenLoaded && !isScreenNotFound && !readonly"
+                class="px-2 py-2 border-b border-secondary"
+            >
+                <FuiProjectFileControls
+                    @setInfoMessage="(msg) => emit('setInfoMessage', msg)"
+                    @setErrorMessage="(msg) => emit('setErrorMessage', msg)"
+                    @projectLoaded="handleProjectFileLoaded"
+                />
+            </div>
             <slot name="left"></slot>
         </div>
         <div class="fui-editor__top pb-1">
@@ -278,12 +288,6 @@ function onMouseClick() {
                 v-if="isScreenLoaded && !isScreenNotFound"
             >
                 <div class="w-1/4 flex flex-row gap-2 items-center justify-start">
-                    <FuiProjectFileControls
-                        v-if="!readonly"
-                        @setInfoMessage="(msg) => emit('setInfoMessage', msg)"
-                        @setErrorMessage="(msg) => emit('setErrorMessage', msg)"
-                        @projectLoaded="handleProjectFileLoaded"
-                    />
                     <Button
                         v-if="isFlipper && isSerialSupported"
                         @click="toggleFlipperPreview"

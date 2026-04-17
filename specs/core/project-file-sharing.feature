@@ -5,6 +5,7 @@ Feature: Project file sharing
 
   Scenario: Saving the current editor state
     Given the editor contains layers on the current screen
+    And the editor offers project file controls above the layers list
     When the user saves a project file
     Then the downloaded file includes the project format version
     And the file includes the current platform

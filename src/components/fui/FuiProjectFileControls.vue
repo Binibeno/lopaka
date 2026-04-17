@@ -78,7 +78,7 @@ async function onProjectFileChange(event: Event) {
 </script>
 
 <template>
-    <div class="flex flex-row gap-2 items-center">
+    <div class="fui-project-file-controls flex flex-col gap-2 items-stretch">
         <Button
             secondary
             filled
@@ -141,3 +141,14 @@ async function onProjectFileChange(event: Event) {
         </FuiPopup>
     </div>
 </template>
+
+<style scoped>
+.fui-project-file-controls :deep(.tooltip),
+.fui-project-file-controls :deep(.btn) {
+    width: 100%;
+}
+
+.fui-project-file-controls :deep(.btn) {
+    white-space: nowrap;
+}
+</style>
