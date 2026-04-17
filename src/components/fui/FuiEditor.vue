@@ -14,6 +14,7 @@ import FuiSelectDisplay from '/src/components/fui/FuiSelectDisplay/FuiSelectDisp
 import FuiSelectPlatform from '/src/components/fui/FuiSelectPlatform.vue';
 import FuiSelectScale from '/src/components/fui/FuiSelectScale.vue';
 import FuiTools from '/src/components/fui/FuiTools.vue';
+import FuiProjectFileControls from '/src/components/fui/FuiProjectFileControls.vue';
 import PaintBrushColorInput from './PaintBrushColorInput.vue';
 import PaintColorModeToggle from './PaintColorModeToggle.vue';
 import Icon from '/src/components/layout/Icon.vue';
@@ -48,6 +49,7 @@ const { platform, warnings } = toRefs(state);
 const { immidiateUpdates } = toRefs(session.state);
 const flipper: ShallowRef<FlipperRPC> = ref(null);
 const uploading = ref(false);
+const projectFileLoadCounter = ref(0);
 const { activeTool, activeLayer } = toRefs(session.editor.state);
 
 const isFlipper = computed(() => platform.value === FlipperPlatform.id);
@@ -216,6 +218,10 @@ function setWarnings(warnings) {
     });
 }
 
+function handleProjectFileLoaded() {
+    projectFileLoadCounter.value++;
+}
+
 function onMouseClick() {
     session.layersManager.clearSelection();
     session.virtualScreen.redraw();
@@ -255,6 +261,16 @@ function onMouseClick() {
         v-if="platform || isScreenNotFound"
     >
         <div class="fui-editor__left -mb-8 border-r border-secondary">
+            <div
+                v-if="isScreenLoaded && !isScreenNotFound && !readonly"
+                class="px-2 py-2 border-b border-secondary"
+            >
+                <FuiProjectFileControls
+                    @setInfoMessage="(msg) => emit('setInfoMessage', msg)"
+                    @setErrorMessage="(msg) => emit('setErrorMessage', msg)"
+                    @projectLoaded="handleProjectFileLoaded"
+                />
+            </div>
             <slot name="left"></slot>
         </div>
         <div class="fui-editor__top pb-1">
@@ -271,7 +287,7 @@ function onMouseClick() {
                 class="font-sans flex flex-row gap-4 justify-between"
                 v-if="isScreenLoaded && !isScreenNotFound"
             >
-                <div class="w-1/6 text-center">
+                <div class="w-1/4 flex flex-row gap-2 items-center justify-start">
                     <Button
                         v-if="isFlipper && isSerialSupported"
                         @click="toggleFlipperPreview"
@@ -285,7 +301,9 @@ function onMouseClick() {
                     <PaintColorModeToggle v-if="!readonly && showColorModeToggle" />
                     <PaintBrushColorInput v-if="!readonly && shouldShowBrushControls" />
                 </div>
-                <FuiSelectScale></FuiSelectScale>
+                <div class="w-1/4 flex justify-end">
+                    <FuiSelectScale></FuiSelectScale>
+                </div>
             </div>
             <div
                 v-if="!isScreenLoaded && !isScreenNotFound"
@@ -358,6 +376,7 @@ function onMouseClick() {
                 </div>
                 <div class="fui-editor__bottom-right pl-4">
                     <FuiEditorSettings
+                        :key="`${platform}-${projectFileLoadCounter}`"
                         :updates="immidiateUpdates"
                         v-if="platform !== Uint32RawPlatform.id && platform !== FreestylePlatform.id"
                     />
