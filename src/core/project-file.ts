@@ -1,6 +1,8 @@
 import { Point } from './point';
 import type { Session } from './session';
 import { downloadAsFile, loadImageAsync } from '../utils';
+import type { Project } from '/src/types';
+import { persistProjectScreens } from './project-screens';
 
 export const LOPAKA_PROJECT_FORMAT = 'lopaka-project';
 export const LOPAKA_PROJECT_VERSION = 1;
@@ -160,12 +162,37 @@ async function hydrateCustomImages(images: SerializedCustomImage[] = []): Promis
     return hydrated.filter((asset): asset is TLayerImageData => Boolean(asset));
 }
 
-export function createProjectSnapshot(session: Session, createdAt = new Date()): LopakaProjectFile {
+export function createProjectSnapshot(
+    session: Session,
+    createdAt = new Date(),
+    project?: Project | null,
+    currentScreenId?: number
+): LopakaProjectFile {
     const platform = session.state.platform;
     const platformInstance = session.platforms[platform];
     const display = session.state.display;
     const title = session.state.screenTitle ?? '';
     const layers = session.layersManager.layers.map((layer) => layer.state);
+    const currentPreview = session.virtualScreen.canvas?.toDataURL?.();
+    const screens =
+        project?.screens?.length
+            ? project.screens.map((screen, index) => {
+                  const isCurrentScreen = screen.id === currentScreenId;
+                  return {
+                      id: screen.id,
+                      title: screen.title || `Screen ${index + 1}`,
+                      imagePreview: isCurrentScreen ? currentPreview : screen.img_preview,
+                      layers: isCurrentScreen ? layers : screen.layers ?? [],
+                  };
+              })
+            : [
+                  {
+                      id: 0,
+                      title,
+                      imagePreview: currentPreview,
+                      layers,
+                  },
+              ];
 
     return {
         format: LOPAKA_PROJECT_FORMAT,
@@ -176,7 +203,7 @@ export function createProjectSnapshot(session: Session, createdAt = new Date()):
             schemaVersion: LOPAKA_PROJECT_VERSION,
         },
         project: {
-            title,
+            title: project?.title ?? title,
             screenTitle: title,
             platform,
             display: [display.x, display.y],
@@ -194,14 +221,7 @@ export function createProjectSnapshot(session: Session, createdAt = new Date()):
             customFonts: cloneJson(session.state.customFonts ?? []),
             customImages: (session.state.customImages ?? []).map(serializeCustomImage),
         },
-        screens: [
-            {
-                id: 0,
-                title,
-                imagePreview: session.virtualScreen.canvas?.toDataURL?.(),
-                layers,
-            },
-        ],
+        screens,
     };
 }
 
@@ -333,6 +353,24 @@ function persistProjectSnapshotToLocalStorage(session: Session, snapshot: Lopaka
     if (platformInstance?.getTemplateSettings()) {
         localStorage.setItem(`lopaka_${platform}_code_settings`, JSON.stringify(platformInstance.getTemplateSettings()));
     }
+
+    persistProjectScreens(
+        {
+            id: 0,
+            title: snapshot.project.title,
+            platform,
+            screen_x: width,
+            screen_y: height,
+            screens: snapshot.screens.map((screen, index) => ({
+                id: screen.id,
+                title: screen.title,
+                img_preview: screen.imagePreview,
+                layers: screen.layers,
+                order: index,
+            })),
+        },
+        snapshot.screens[0]?.id
+    );
 }
 
 export async function restoreProjectSnapshot(session: Session, snapshot: LopakaProjectFile): Promise<void> {
