@@ -39,7 +39,7 @@ export type LopakaProjectFile = {
         codeSettings?: Record<string, boolean>;
     };
     assets: {
-        customFonts: JsonObject[];
+        customFonts: TPlatformFont[];
         customImages: SerializedCustomImage[];
     };
     screens: LopakaProjectScreenFile[];
@@ -51,7 +51,7 @@ type SerializedCustomImage = {
     height: number;
     colorMode?: string;
     isCustom?: boolean;
-    id?: number | null;
+    id?: number;
     src?: string;
 };
 
@@ -91,34 +91,73 @@ function serializeCustomImage(asset: any): SerializedCustomImage {
         height: Number(asset.height) || 0,
         colorMode: asset.colorMode,
         isCustom: asset.isCustom,
-        id: asset.id ?? null,
+        id: typeof asset.id === 'number' ? asset.id : undefined,
         src: asset.image?.src,
     };
 }
 
-async function hydrateCustomImages(images: SerializedCustomImage[] = []) {
+function normalizeCustomFonts(fonts: unknown): TPlatformFont[] {
+    if (!Array.isArray(fonts)) {
+        return [];
+    }
+
+    return fonts
+        .filter((font): font is JsonObject => isObject(font))
+        .filter((font) => typeof font.name === 'string' && typeof font.title === 'string')
+        .filter((font) => typeof font.file === 'string' || typeof font.file === 'number')
+        .filter((font) => typeof font.format === 'number')
+        .map((font) => {
+            const options =
+                isObject(font.options) && typeof font.options.size === 'number'
+                    ? {
+                          size: font.options.size,
+                          textCharHeight:
+                              typeof font.options.textCharHeight === 'number'
+                                  ? font.options.textCharHeight
+                                  : undefined,
+                          textCharWidth:
+                              typeof font.options.textCharWidth === 'number'
+                                  ? font.options.textCharWidth
+                                  : undefined,
+                      }
+                    : undefined;
+
+            return {
+                name: font.name,
+                title: font.title,
+                file: font.file,
+                options,
+                format: font.format,
+            };
+        });
+}
+
+async function hydrateCustomImages(images: SerializedCustomImage[] = []): Promise<TLayerImageData[]> {
     const hydrated = await Promise.all(
-        images.map(async (asset) => {
+        images.map(async (asset): Promise<TLayerImageData | null> => {
             if (!asset.src) {
                 return null;
             }
             try {
                 const image = await loadImageAsync(asset.src);
-                return {
+                const hydratedAsset: TLayerImageData = {
                     name: asset.name,
                     width: asset.width,
                     height: asset.height,
                     colorMode: asset.colorMode,
                     isCustom: asset.isCustom ?? true,
-                    id: asset.id ?? null,
                     image,
                 };
+                if (typeof asset.id === 'number') {
+                    hydratedAsset.id = asset.id;
+                }
+                return hydratedAsset;
             } catch {
                 return null;
             }
         })
     );
-    return hydrated.filter(Boolean);
+    return hydrated.filter((asset): asset is TLayerImageData => Boolean(asset));
 }
 
 export function createProjectSnapshot(session: Session, createdAt = new Date()): LopakaProjectFile {
@@ -242,7 +281,7 @@ export function validateProjectFile(value: unknown): LopakaProjectFile {
                 : undefined,
         },
         assets: {
-            customFonts: Array.isArray(assets.customFonts) ? cloneJson(assets.customFonts) : [],
+            customFonts: normalizeCustomFonts(assets.customFonts),
             customImages: Array.isArray(assets.customImages) ? cloneJson(assets.customImages) : [],
         },
         screens,
