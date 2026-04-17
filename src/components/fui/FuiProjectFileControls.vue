@@ -11,8 +11,13 @@ import {
     restoreProjectSnapshot,
 } from '/src/core/project-file';
 import { logEvent, readTextFileAsync } from '/src/utils';
+import type { Project, ProjectScreen } from '/src/types';
 
 const emit = defineEmits(['setInfoMessage', 'setErrorMessage', 'projectLoaded']);
+const props = defineProps<{
+    project?: Project | null;
+    screen?: ProjectScreen | null;
+}>();
 
 const session = useSession();
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -26,7 +31,7 @@ function getErrorMessage(error: unknown): string {
 
 function saveProjectFile() {
     try {
-        const snapshot = createProjectSnapshot(session);
+        const snapshot = createProjectSnapshot(session, new Date(), props.project, props.screen?.id);
         downloadProjectSnapshot(snapshot);
         emit('setInfoMessage', 'Project file saved');
         logEvent('button_save_project_file');
@@ -65,7 +70,7 @@ async function onProjectFileChange(event: Event) {
         const fileContent = await readTextFileAsync(file);
         const snapshot = parseProjectFile(fileContent);
         await restoreProjectSnapshot(session, snapshot);
-        emit('projectLoaded');
+        emit('projectLoaded', snapshot);
         emit('setInfoMessage', 'Project file loaded');
     } catch (error) {
         emit('setErrorMessage', getErrorMessage(error));

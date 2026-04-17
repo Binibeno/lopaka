@@ -32,6 +32,8 @@ import { FreestylePlatform } from '/src/platforms/freestyle';
 import { U8g2Platform } from '/src/platforms/u8g2';
 import { addCustomImage } from '/src/core/session';
 import { createScreenAutosave } from '/src/core/screen-autosave';
+import { captureScreenSnapshot, persistProjectScreens } from '/src/core/project-screens';
+import type { LopakaProjectFile } from '/src/core/project-file';
 
 const props = defineProps<{
     project: Project | null;
@@ -41,7 +43,7 @@ const props = defineProps<{
     isScreenLoaded: boolean;
 }>();
 
-const emit = defineEmits(['openPresenter', 'setInfoMessage', 'setErrorMessage']);
+const emit = defineEmits(['openPresenter', 'setInfoMessage', 'setErrorMessage', 'projectLoaded']);
 
 const session = useSession();
 const { virtualScreen, state, platforms } = session;
@@ -80,7 +82,10 @@ const screenAutosave = createScreenAutosave(1000);
 
 watch(immidiateUpdates, (newValue, oldValue) => {
     // Capture the current id so delayed writes cannot target another screen.
-    const capturedScreenId = props.screen.id;
+    const capturedScreenId = props.screen?.id;
+    if (capturedScreenId === undefined) {
+        return;
+    }
     // Capture layers immediately so delayed tasks do not read another screen state later.
     const capturedLayers = session.layersManager.layers.map((layer) => layer.state);
     // Capture preview immediately so delayed updates keep the right thumbnail.
@@ -95,8 +100,8 @@ watch(immidiateUpdates, (newValue, oldValue) => {
             }
             // Persist the captured snapshot for the exact screen that changed.
             saveLayers(screenId, { layers: capturedLayers, imagePreview: capturedPreview });
-            // Refresh only the matching screen thumbnail with the captured preview.
-            updateScreenPreview(screenId, capturedPreview);
+            // Refresh only the matching screen data with the captured snapshot.
+            updateScreenSnapshot(screenId, capturedLayers, capturedPreview);
         },
     });
 });
@@ -104,7 +109,7 @@ watch(
     () => props.screen?.id,
     (newScreenId, previousScreenId) => {
         // Flush pending autosave before switching context to another screen.
-        if (previousScreenId && previousScreenId !== newScreenId) {
+        if (previousScreenId !== undefined && previousScreenId !== newScreenId) {
             screenAutosave.flush();
         }
     }
@@ -195,14 +200,10 @@ function sendFlipperImage() {
     flipper.value.sendImage(virtualScreen.canvasContext.getImageData(0, 0, 128, 64));
 }
 
-function updateScreenPreview(screen_id, imagePreview) {
-    if (!props.project.screens) return;
-    props.project.screens = props.project.screens.map((item) => {
-        if (item && item?.id === screen_id) {
-            item.img_preview = imagePreview;
-        }
-        return item;
-    });
+function updateScreenSnapshot(screen_id, layers, imagePreview) {
+    if (!props.project?.screens) return;
+    captureScreenSnapshot(props.project, screen_id, layers, imagePreview);
+    persistProjectScreens(props.project, screen_id);
 }
 
 function copyCode() {
@@ -218,8 +219,9 @@ function setWarnings(warnings) {
     });
 }
 
-function handleProjectFileLoaded() {
+function handleProjectFileLoaded(snapshot: LopakaProjectFile) {
     projectFileLoadCounter.value++;
+    emit('projectLoaded', snapshot);
 }
 
 function onMouseClick() {
@@ -266,6 +268,8 @@ function onMouseClick() {
                 class="px-2 py-2 border-b border-secondary"
             >
                 <FuiProjectFileControls
+                    :project="project"
+                    :screen="screen"
                     @setInfoMessage="(msg) => emit('setInfoMessage', msg)"
                     @setErrorMessage="(msg) => emit('setErrorMessage', msg)"
                     @projectLoaded="handleProjectFileLoaded"

@@ -2,11 +2,22 @@
     lang="ts"
     setup
 >
-import { onMounted, ref, toRefs } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useSession } from '/src/core/session';
 import FuiEditor from '/src/components/fui/FuiEditor.vue';
 import { Project, ProjectScreen } from '/src/types';
 import FuiLayers from './fui/layers/FuiLayers.vue';
+import FuiScreens from './fui/FuiScreens.vue';
+import {
+    captureScreenSnapshot,
+    createProjectScreen,
+    getNextScreenId,
+    getStoredCurrentScreenId,
+    loadStoredProjectScreens,
+    normalizeProjectScreens,
+    persistProjectScreens,
+} from '/src/core/project-screens';
+import type { LopakaProjectFile } from '/src/core/project-file';
 
 const session = useSession();
 const { setIsPublic } = session;
@@ -23,20 +34,122 @@ onMounted(async () => {
     session.state.customImages = [];
     session.state.customFonts = [];
     isScreenLoaded.value = false;
-    isScreenLoaded.value = true;
+    await session.initSandbox();
+
+    const fallbackLayers = session.layersManager.layers.map((layer) => layer.state);
+    const storedScreens = loadStoredProjectScreens();
+    const screens = normalizeProjectScreens(storedScreens ?? undefined, fallbackLayers);
+    const storedScreenId = getStoredCurrentScreenId();
+    const selectedScreen = screens.find((screen) => screen.id === storedScreenId) ?? screens[0];
+
     currenProject.value = {
         id: 0,
         title: '',
-        screens: [{ id: 0 }],
+        screens,
         platform: session.state.platform,
         screen_x: session.state.display.x,
         screen_y: session.state.display.y,
         private: true,
     };
-    await session.initSandbox();
+    currentScreen.value = selectedScreen;
+    if (storedScreens) {
+        await loadScreenLayers(selectedScreen);
+    }
+    persistProjectScreens(currenProject.value, selectedScreen.id);
     isScreenLoaded.value = true;
     setIsPublic(false);
 });
+
+function getCurrentLayerSnapshot() {
+    return session.layersManager.layers.map((layer) => layer.state);
+}
+
+function getCurrentPreview() {
+    return session.virtualScreen.canvas?.toDataURL?.();
+}
+
+function saveCurrentScreenSnapshot() {
+    if (currentScreen.value?.id === undefined || !currenProject.value?.screens?.length) {
+        return;
+    }
+
+    captureScreenSnapshot(
+        currenProject.value,
+        currentScreen.value.id,
+        getCurrentLayerSnapshot(),
+        getCurrentPreview()
+    );
+    persistProjectScreens(currenProject.value, currentScreen.value.id);
+}
+
+async function loadScreenLayers(screen: ProjectScreen) {
+    session.editor.clear();
+    session.history.clear(false);
+    await session.layersManager.loadLayers(screen.layers ?? []);
+    session.layersManager.clearSelection();
+    session.virtualScreen.redraw();
+}
+
+async function selectScreen(screen: ProjectScreen) {
+    if (screen.id === currentScreen.value?.id) {
+        return;
+    }
+
+    isScreenLoaded.value = false;
+    saveCurrentScreenSnapshot();
+    currentScreen.value = screen;
+    await loadScreenLayers(screen);
+    persistProjectScreens(currenProject.value, screen.id);
+    isScreenLoaded.value = true;
+}
+
+async function addScreen() {
+    isScreenLoaded.value = false;
+    saveCurrentScreenSnapshot();
+    const screens = normalizeProjectScreens(currenProject.value.screens);
+    const nextId = getNextScreenId(screens);
+    const nextScreen = createProjectScreen(screens.length);
+    nextScreen.id = nextId;
+    screens.push(nextScreen);
+    currenProject.value.screens = screens;
+    currentScreen.value = nextScreen;
+    await loadScreenLayers(nextScreen);
+    persistProjectScreens(currenProject.value, nextId);
+    isScreenLoaded.value = true;
+}
+
+function renameScreen(screen: ProjectScreen, title: string) {
+    const screens = normalizeProjectScreens(currenProject.value.screens).map((item) =>
+        item.id === screen.id ? { ...item, title } : item
+    );
+    currenProject.value.screens = screens;
+    if (currentScreen.value?.id === screen.id) {
+        currentScreen.value = screens.find((item) => item.id === screen.id) ?? currentScreen.value;
+    }
+    persistProjectScreens(currenProject.value, currentScreen.value?.id);
+}
+
+function onProjectLoaded(snapshot: LopakaProjectFile) {
+    const screens = normalizeProjectScreens(
+        snapshot.screens.map((screen, index) => ({
+            id: screen.id,
+            title: screen.title || `Screen ${index + 1}`,
+            img_preview: screen.imagePreview,
+            layers: screen.layers,
+            order: index,
+        }))
+    );
+    currenProject.value = {
+        ...currenProject.value,
+        title: snapshot.project.title,
+        platform: snapshot.project.platform,
+        screen_x: snapshot.project.display[0],
+        screen_y: snapshot.project.display[1],
+        screens,
+    };
+    currentScreen.value = screens[0];
+    persistProjectScreens(currenProject.value, currentScreen.value.id);
+}
 
 function setInfoMessage(msg) {
     infoMessage.value = msg;
@@ -61,6 +174,7 @@ function setErrorMessage(msg) {
             :isScreenNotFound="isScreenNotFound"
             @setErrorMessage="setErrorMessage"
             @setInfoMessage="setInfoMessage"
+            @projectLoaded="onProjectLoaded"
         >
             <template #messages>
                 <div
@@ -77,6 +191,13 @@ function setErrorMessage(msg) {
                 </div>
             </template>
             <template #left>
+                <FuiScreens
+                    :screens="currenProject.screens ?? []"
+                    :currentScreen="currentScreen"
+                    @selectScreen="selectScreen"
+                    @addScreen="addScreen"
+                    @renameScreen="renameScreen"
+                />
                 <FuiLayers></FuiLayers>
             </template>
             <template #title></template>

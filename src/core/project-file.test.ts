@@ -53,7 +53,7 @@ function createFakeSession() {
         screenTitle: 'Status Screen',
         brushColor: '#ff0000',
         paintColorMode: 'rgb',
-        customFonts: [{ name: 'CustomFont', title: 'Custom Font', file: '/fonts/custom.h' }],
+        customFonts: [{ name: 'CustomFont', title: 'Custom Font', file: '/fonts/custom.h', format: 3 }],
         customImages: [],
         immidiateUpdates: 1,
     };
@@ -130,7 +130,7 @@ describe('project file sharing', () => {
             },
         });
         expect(snapshot.assets.customFonts).toEqual([
-            { name: 'CustomFont', title: 'Custom Font', file: '/fonts/custom.h' },
+            { name: 'CustomFont', title: 'Custom Font', file: '/fonts/custom.h', format: 3 },
         ]);
         expect(snapshot.screens).toEqual([
             {
@@ -138,6 +138,37 @@ describe('project file sharing', () => {
                 title: 'Status Screen',
                 imagePreview: 'data:image/png;base64,preview',
                 layers: [{ t: 'rect', n: 'Layer 1' }],
+            },
+        ]);
+    });
+
+    it('exports all project screens while refreshing the active screen from the session', () => {
+        const { session } = createFakeSession();
+        const snapshot = createProjectSnapshot(session, new Date('2026-04-17T12:00:00.000Z'), {
+            id: 0,
+            title: 'Multi Screen Project',
+            platform: 'tft-espi',
+            screen_x: 128,
+            screen_y: 64,
+            screens: [
+                { id: 0, title: 'Screen 1', layers: [{ t: 'old' }], img_preview: 'old-preview', order: 0 },
+                { id: 1, title: 'Screen 2', layers: [{ t: 'circle' }], img_preview: 'screen-2-preview', order: 1 },
+            ],
+        }, 0);
+
+        expect(snapshot.project.title).toBe('Multi Screen Project');
+        expect(snapshot.screens).toEqual([
+            {
+                id: 0,
+                title: 'Screen 1',
+                imagePreview: 'data:image/png;base64,preview',
+                layers: [{ t: 'rect', n: 'Layer 1' }],
+            },
+            {
+                id: 1,
+                title: 'Screen 2',
+                imagePreview: 'screen-2-preview',
+                layers: [{ t: 'circle' }],
             },
         ]);
     });
@@ -180,7 +211,7 @@ describe('project file sharing', () => {
                 },
             },
             assets: {
-                customFonts: [{ name: 'ImportedFont', title: 'Imported Font', file: '/fonts/imported.h' }],
+                customFonts: [{ name: 'ImportedFont', title: 'Imported Font', file: '/fonts/imported.h', format: 3 }],
                 customImages: [],
             },
             screens: [
